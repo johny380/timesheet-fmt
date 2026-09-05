@@ -1,0 +1,4 @@
+/bin/
+/tsfmt
+*.test
+*.out
