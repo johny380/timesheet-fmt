@@ -4,7 +4,10 @@
 //	2026-09-01 13:00-17:30 acme-corp: implement parser
 //
 // Each line is a date, a time range, and a "project: description" pair.
-// Blank lines and lines starting with "#" are ignored.
+// Blank lines and lines starting with "#" are ignored. A time range whose
+// end is earlier than its start (e.g. 22:00-06:00) is read as a shift that
+// crosses midnight and ends on the following day; its hours are counted
+// against the day it started on.
 package timesheet
 
 import (
@@ -16,17 +19,39 @@ import (
 	"time"
 )
 
-// Entry is one logged block of work.
+// Entry is one logged block of work. End <= Start means the shift crosses
+// midnight and ends on the day after Day.
 type Entry struct {
 	Day         time.Time // date only, time-of-day is zero
-	Start       int       // minutes since midnight
-	End         int       // minutes since midnight
+	Start       int       // minutes since midnight on Day
+	End         int       // minutes since midnight on Day, or the next day
 	Project     string
 	Description string
 }
 
-// Minutes returns how long the entry lasted.
-func (e Entry) Minutes() int { return e.End - e.Start }
+// Minutes returns how long the entry lasted. A shift that crosses midnight
+// (End <= Start) is assumed to run into the following day rather than
+// wrapping past it a second time.
+func (e Entry) Minutes() int {
+	if e.End <= e.Start {
+		return (24*60 - e.Start) + e.End
+	}
+	return e.End - e.Start
+}
+
+// startTime and endTime give the entry's absolute start and end, so
+// overlap checks work the same whether or not a shift crosses midnight.
+func (e Entry) startTime() time.Time {
+	return e.Day.Add(time.Duration(e.Start) * time.Minute)
+}
+
+func (e Entry) endTime() time.Time {
+	t := e.Day.Add(time.Duration(e.End) * time.Minute)
+	if e.End <= e.Start {
+		t = t.AddDate(0, 0, 1)
+	}
+	return t
+}
 
 // Sheet is a parsed, validated collection of entries, sorted by day then
 // start time.
@@ -144,9 +169,10 @@ func parseRange(s string) (start, end int, err error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	// v1 has no concept of an overnight shift: end must fall on the same
-	// day as start.
-	if end <= start {
+	// end == start is always zero duration, which is always an error.
+	// end < start isn't an error: it's read as a shift that crosses
+	// midnight and ends the following day.
+	if end == start {
 		return 0, 0, fmt.Errorf("end time must be after start time in %q", s)
 	}
 	return start, end, nil
@@ -160,22 +186,28 @@ func parseClock(s string) (int, error) {
 	return t.Hour()*60 + t.Minute(), nil
 }
 
-// checkOverlaps assumes entries are sorted by day then start time. Under
-// that ordering it's enough to compare each entry with its immediate
-// predecessor: if no adjacent pair overlaps, transitivity of the sort
-// guarantees no pair anywhere overlaps either.
+// checkOverlaps assumes entries are sorted by day then start time, which
+// is also their absolute chronological order. Under that ordering it's
+// enough to compare each entry with its immediate predecessor: if no
+// adjacent pair overlaps, transitivity of the sort guarantees no pair
+// anywhere overlaps either. Comparing absolute start/end rather than raw
+// minutes-since-midnight means a shift that crosses midnight is checked
+// against the following day's entries too.
 func checkOverlaps(entries []Entry) error {
 	for i := 1; i < len(entries); i++ {
 		prev, cur := entries[i-1], entries[i]
-		if !prev.Day.Equal(cur.Day) {
+		if !cur.startTime().Before(prev.endTime()) {
 			continue
 		}
-		if cur.Start < prev.End {
+		if prev.Day.Equal(cur.Day) {
 			return fmt.Errorf("overlapping entries on %s: %s-%s and %s-%s",
 				cur.Day.Format("2006-01-02"),
 				formatClock(prev.Start), formatClock(prev.End),
 				formatClock(cur.Start), formatClock(cur.End))
 		}
+		return fmt.Errorf("overlapping entries: %s %s-%s and %s %s-%s",
+			prev.Day.Format("2006-01-02"), formatClock(prev.Start), formatClock(prev.End),
+			cur.Day.Format("2006-01-02"), formatClock(cur.Start), formatClock(cur.End))
 	}
 	return nil
 }

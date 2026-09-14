@@ -28,13 +28,17 @@ Blank lines and lines starting with `#` are ignored. Dates are
 
 - the date isn't a real calendar date (`2026-02-30` is rejected, not
   silently rolled forward to March)
-- the end time isn't strictly after the start time
+- the end time equals the start time (zero-length entries are rejected)
 - the project/description separator (`:`) is missing, or either side is
   empty
-- the entry overlaps another entry on the same day (touching is fine:
-  `09:00-12:00` followed by `12:00-13:00` is not an overlap)
+- the entry overlaps another entry, including one on the next day
+  (touching is fine: `09:00-12:00` followed by `12:00-13:00` is not an
+  overlap)
 
-There's no support yet for a shift that crosses midnight - see Roadmap.
+A time range whose end is earlier than its start, like `22:00-06:00`, is
+read as a shift that crosses midnight rather than an error. Its hours are
+counted against the day it started on, and it's checked for overlaps
+against the following day's entries too.
 
 ## Library usage
 

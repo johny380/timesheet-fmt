@@ -41,7 +41,6 @@ func TestParseInvalid(t *testing.T) {
 		{"too few fields", "two words", "expected"},
 		{"invalid calendar date", "2026-02-30 09:00-10:00 acme: work", "invalid date"},
 		{"month out of range", "2026-13-01 09:00-10:00 acme: work", "invalid date"},
-		{"end before start", "2026-09-01 10:00-09:00 acme: work", "end time must be after start time"},
 		{"zero duration", "2026-09-01 09:00-09:00 acme: work", "end time must be after start time"},
 		{"hour out of range", "2026-09-01 24:00-25:00 acme: work", "invalid time"},
 		{"time missing minutes", "2026-09-01 9-10 acme: work", "invalid time"},
@@ -61,6 +60,40 @@ func TestParseInvalid(t *testing.T) {
 				t.Fatalf("error %q does not contain %q", err.Error(), c.wantErr)
 			}
 		})
+	}
+}
+
+func TestOvernightShift(t *testing.T) {
+	input := "2026-09-01 22:00-06:00 acme: night shift\n"
+	sheet, err := Parse(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := sheet.Entries[0].Minutes(), 8*60; got != want {
+		t.Fatalf("Minutes() = %d, want %d", got, want)
+	}
+	if got, want := sheet.TotalMinutes(), 8*60; got != want {
+		t.Fatalf("TotalMinutes() = %d, want %d", got, want)
+	}
+}
+
+func TestOvernightShiftTouchingNextDayDoesNotOverlap(t *testing.T) {
+	input := "2026-09-01 22:00-06:00 acme: night shift\n" +
+		"2026-09-02 06:00-08:00 acme: morning handoff\n"
+	if _, err := Parse(strings.NewReader(input)); err != nil {
+		t.Fatalf("back-to-back overnight shift should be valid: %v", err)
+	}
+}
+
+func TestOvernightShiftOverlapsNextDay(t *testing.T) {
+	input := "2026-09-01 22:00-06:00 acme: night shift\n" +
+		"2026-09-02 05:00-09:00 acme: morning shift\n"
+	_, err := Parse(strings.NewReader(input))
+	if err == nil {
+		t.Fatalf("expected an overlap error")
+	}
+	if !strings.Contains(err.Error(), "overlapping") {
+		t.Fatalf("error %q does not mention overlapping", err.Error())
 	}
 }
 
