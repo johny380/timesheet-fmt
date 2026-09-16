@@ -215,3 +215,43 @@ func checkOverlaps(entries []Entry) error {
 func formatClock(m int) string {
 	return fmt.Sprintf("%02d:%02d", m/60, m%60)
 }
+
+// Gap describes idle time between two entries that fall on the same day.
+// Entries on different days are never reported as a gap: the time between
+// one day's last entry and the next day's first is normal, not a hole in
+// the schedule.
+type Gap struct {
+	Day       time.Time
+	PrevEnd   int // minutes since midnight, end of the entry before the gap
+	NextStart int // minutes since midnight, start of the entry after the gap
+	Minutes   int
+}
+
+func (g Gap) String() string {
+	return fmt.Sprintf("%s: %s gap between %s and %s",
+		g.Day.Format("2006-01-02"), formatMinutes(g.Minutes), formatClock(g.PrevEnd), formatClock(g.NextStart))
+}
+
+// FindGaps reports every idle stretch between consecutive same-day entries
+// in s. It assumes s.Entries is sorted and overlap-free, which is true for
+// anything returned by Parse.
+func FindGaps(s *Sheet) []Gap {
+	var gaps []Gap
+	for i := 1; i < len(s.Entries); i++ {
+		prev, cur := s.Entries[i-1], s.Entries[i]
+		if !prev.Day.Equal(cur.Day) {
+			continue
+		}
+		idle := int(cur.startTime().Sub(prev.endTime()).Minutes())
+		if idle <= 0 {
+			continue
+		}
+		gaps = append(gaps, Gap{
+			Day:       cur.Day,
+			PrevEnd:   prev.End,
+			NextStart: cur.Start,
+			Minutes:   idle,
+		})
+	}
+	return gaps
+}

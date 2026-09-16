@@ -97,6 +97,41 @@ func TestOvernightShiftOverlapsNextDay(t *testing.T) {
 	}
 }
 
+func TestFindGaps(t *testing.T) {
+	input := "2026-09-01 09:00-12:00 acme: a\n" +
+		"2026-09-01 13:00-14:00 acme: b\n" +
+		"2026-09-02 09:00-17:00 acme: c\n"
+	sheet, err := Parse(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	gaps := FindGaps(sheet)
+	if len(gaps) != 1 {
+		t.Fatalf("got %d gaps, want 1: %v", len(gaps), gaps)
+	}
+	g := gaps[0]
+	if g.Minutes != 60 {
+		t.Fatalf("gap minutes = %d, want 60", g.Minutes)
+	}
+	if got, want := g.String(), "2026-09-01: 1h00m gap between 12:00 and 13:00"; got != want {
+		t.Fatalf("gap string = %q, want %q", got, want)
+	}
+}
+
+func TestFindGapsIgnoresBackToBackAndAcrossDays(t *testing.T) {
+	input := "2026-09-01 09:00-12:00 acme: a\n" +
+		"2026-09-01 12:00-13:00 acme: b\n" +
+		"2026-09-02 09:00-17:00 acme: c\n"
+	sheet, err := Parse(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gaps := FindGaps(sheet); len(gaps) != 0 {
+		t.Fatalf("got %d gaps, want 0: %v", len(gaps), gaps)
+	}
+}
+
 func TestFormat(t *testing.T) {
 	input := "2026-09-01 09:00-12:30 acme-corp: environment setup\n" +
 		"2026-09-01 13:00-17:00 acme-corp: implement parser\n"

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 
@@ -10,12 +11,18 @@ import (
 )
 
 func main() {
-	if len(os.Args) != 2 {
-		fmt.Fprintln(os.Stderr, "usage: tsfmt <file>")
+	strict := flag.Bool("strict", false, "warn on gaps between entries within a day")
+	flag.Usage = func() {
+		fmt.Fprintln(os.Stderr, "usage: tsfmt [-strict] <file>")
+	}
+	flag.Parse()
+
+	if flag.NArg() != 1 {
+		flag.Usage()
 		os.Exit(2)
 	}
 
-	f, err := os.Open(os.Args[1])
+	f, err := os.Open(flag.Arg(0))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -26,6 +33,12 @@ func main() {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+
+	if *strict {
+		for _, g := range timesheet.FindGaps(sheet) {
+			fmt.Fprintf(os.Stderr, "warning: %s\n", g)
+		}
 	}
 
 	fmt.Print(timesheet.Format(sheet))

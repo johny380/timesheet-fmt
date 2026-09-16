@@ -89,6 +89,19 @@ total  16h00m
 or, on a bad file, a message on stderr pointing at the offending line
 and a non-zero exit code.
 
+With `-strict`, it also prints a warning to stderr for every gap between
+two entries on the same day (a day's first entry starting late, or the
+whole day being empty, isn't a gap - only idle time between logged
+entries is):
+
+```
+go run ./cmd/tsfmt -strict week.txt
+```
+
+```
+warning: 2026-09-01: 1h00m gap between 12:00 and 13:00
+```
+
 ## Status
 
 Early. The parser and pretty printer work and are covered by tests, but
