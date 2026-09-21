@@ -13,23 +13,28 @@ import (
 func main() {
 	strict := flag.Bool("strict", false, "warn on gaps between entries within a day")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: tsfmt [-strict] <file>")
+		fmt.Fprintln(os.Stderr, "usage: tsfmt [-strict] [file]")
+		fmt.Fprintln(os.Stderr, "if file is omitted, tsfmt reads from stdin")
 	}
 	flag.Parse()
 
-	if flag.NArg() != 1 {
+	if flag.NArg() > 1 {
 		flag.Usage()
 		os.Exit(2)
 	}
 
-	f, err := os.Open(flag.Arg(0))
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	in := os.Stdin
+	if flag.NArg() == 1 {
+		f, err := os.Open(flag.Arg(0))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		defer f.Close()
+		in = f
 	}
-	defer f.Close()
 
-	sheet, err := timesheet.Parse(f)
+	sheet, err := timesheet.Parse(in)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
